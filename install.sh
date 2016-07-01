@@ -638,6 +638,11 @@ if [ -n "$INSTALL_PROXY" ]; then
 	else
 		sed -ri s,^token.*,token=$TOKEN,g $CONF_FILE
 	fi
+
+	if [ $? -ne 0 ]; then
+		exit_with_failure "Failed to write to configuration file at $CONF_FILE"
+	fi
+
 	echo_success
 	# Start the service.
 	echo_step "  Starting Service"
@@ -775,7 +780,6 @@ if [ -n "$OVERWRITE_COLLECTD_CONFIG" ]; then
         FETCHER="wget --quiet -O /tmp/collectd_conf.tar.gz"
     elif command_exists curl; then
         FETCHER="curl -L --silent -o /tmp/collectd_conf.tar.gz"
-    elif command_exists curl; then
     else
         exit_with_failure "Either 'wget' or 'curl' are needed"
     fi
@@ -812,18 +816,16 @@ if [ -n "$OVERWRITE_COLLECTD_CONFIG" ]; then
 fi
 
 if [ -z "$APP_CONFIGURE" ]; then
-    if ask "Would you like to configure collectd based on your installed app? "; then
+    if ask "Would you like to configure collectd based on your installed app? " Y; then
         APP_CONFIGURE="yes"
     else:
         echo
         echo "Keeping the default configuration"
         echo
+    fi
 fi
 
 if [ -n "$APP_CONFIGURE" ]; then
-# download via tar
-# run python
-# remove python dir
     if command_exists wget; then
         FETCHER="wget --quiet -O /tmp/app_configure.tar.gz"
     elif command_exists curl; then
@@ -843,14 +845,23 @@ if [ -n "$APP_CONFIGURE" ]; then
         exit_with_failure "Failed to extract configuration files"
     fi
     echo_success
-    python /tmp/app_configure/install/gather_metrics.py
+    if command_exists wget; then
+        python /tmp/app_configure/install/gather_metrics.py
+    else
+        exit_with_failure "Python is needed to enable the app configure installation"
+    fi
 fi
 
+if [ "$?" == 0 ]; then
 
-
+echo_step "  Restarting collectd"
+service collectd restart >>${INSTALL_LOG} 2>&1
+echo_success
 echo
 echo "======================================================================================="
 echo "SUCCESS"
+fi
+
 if [ -n "$INSTALL_PROXY" ]; then
 	echo
 	echo "The Wavefront Proxy has been successfully installed. To test sending a metric, open telnet to the port 2878 and type my.test.metric 10 into the terminal and hit enter. The metric should appear on Wavefront shortly. Additional configuration can be found at $CONF_FILE. A service restart is needed for configuration changes to take effect."
