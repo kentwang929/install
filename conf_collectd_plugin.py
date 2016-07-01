@@ -39,7 +39,7 @@ def check_collectd_conf_dir():
         utils.call_command("mkdir "+COLLECTD_CONF_DIR)
 
 def check_install_state(plugin):
-    print ("Cannot check %s yet." % plugin)
+    print ("Cannot check install state yet.")
     return False
 
 def write_tcpconns_conf_plugin(open_ports):
@@ -157,6 +157,8 @@ def install_apache_plugin():
                                   "please consult support@wavefront.com"+
                                   "for any additional help.")
         else:
+            utils.print_warn("Collectd plugin will not work if the "
+                             "ExtendedStatus is not turned on.")
             utils.exit_with_message("Consult support@wavefront.com for any "
                 "additional help.")
 
@@ -246,7 +248,7 @@ def write_apache_plugin(out):
 
     print ""
     sys.stdout.write("To monitor a apache server, "
-        "you must have/add something similar to the configuration file:\n"
+        "you must add/have something similar to the configuration file:\n"
         "<Location /server-status>\n"
         "  SetHandler server-status\n"
         "</Location>\n"
@@ -269,9 +271,11 @@ def write_apache_plugin(out):
             sys.stderr.write("Authorization server status is required, please "
                             "try again.\n")
         elif ret == NOT_FOUND or ret == INVALID_URL:
+            utils.print_failure()
             sys.stderr.write("Invalid url was provided, please try "
                             "again.\n")
         elif ret == HTTP_OK:
+            utils.print_success()
             if url in server_list:
                 utils.print_warn("You have already added this url") 
             else:
@@ -283,7 +287,6 @@ def write_apache_plugin(out):
                         "by collectd.")
                     utils.ask("Would you like to record this url anyway?", "no")
                 else:
-                    utils.print_success()
                     print res
                     res = utils.ask("Is this the correct status to monitor?")
                     print ""
