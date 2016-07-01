@@ -103,4 +103,4 @@ if __name__ == "__main__":
     conf.check_collectd_exists()
     conf.check_collectd_path()
     check_fqdn()
-#    detect_applications()
+    detect_applications()
