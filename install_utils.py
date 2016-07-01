@@ -58,6 +58,45 @@ def get_input(prompt, default=None):
 
     return user_input
 
+# converted from one line script utils to python callable
+
+def print_warn(msg):
+    print ""
+    call_command("tput setaf 3") # 3 = yellow
+    sys.stdout.write("[ WARNING ]\n")
+    call_command("tput sgr0")
+    sys.stderr.write(msg+"\n")
+
+def print_failure():
+    print ""
+    call_command("tput setaf 1") # 1 = red
+    print_right("[ FAILED ]")
+    call_command("tput sgr0")
+
+def print_success():
+    call_command("tput setaf 2") # 2 = green
+    print_right("[ OK ]")
+    call_command("tput sgr0")
+
+def print_step(msg):
+    call_command("tput setaf 6")
+    sys.stdout.write(msg+"\n")
+    call_command("tput sgr0")
+
+def print_right(msg):
+    call_command("tput cuu1")
+    call_command("tput cuf $(tput cols)")
+    call_command("tput cub %d" % len(msg))
+    sys.stdout.write(msg+"\n")
+
+def exit_with_message(msg):
+    sys.stderr.write(msg+"\n")
+    sys.exit()
+
+def exit_with_failrue(msg):
+    print_failure()
+    exit_with_message(msg)
+  
 # utils using subprocess 
 
 def call_command(command):  
@@ -86,8 +125,7 @@ def get_command_output(command):
         stderr=subprocess.STDOUT,
         executable='/bin/bash')
     except:
-        print "Unexpected error: ", sys.exe_info()[0]
-        sys.exit()
+        res = None
 
     return res
 
@@ -109,10 +147,6 @@ def write_file(filename):
         out = None
     return out
 
-def exit_with_message(msg):
-    sys.stderr.write(msg+"\n")
-    sys.exit()
-
 def get_http_status(url):
     status_cmd = "curl --head -s "+url+" | head -n 1"
     return get_command_output(status_cmd)
@@ -121,4 +155,5 @@ if __name__ == "__main__":
     ask("Begin testing")
     print call_command("ls > /dev/null")
     print command_exists("python")
-    get_input("What's your name?")
+    print_step("Next step is")
+    print_warn("REALLY long text"*10)

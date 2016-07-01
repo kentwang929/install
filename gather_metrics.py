@@ -69,11 +69,10 @@ def detect_applications():
         stderr=subprocess.STDOUT,
         executable='/bin/bash')
     except:
-        print "Unexpected error: ", sys.exe_info()[0]
+        print "Unexpected error."
         sys.exit()
 
     if 'apache' in res or 'httpd' in res:
-        print "Has apache"
         conf.install_apache_plugin()
     if 'nginx' in res:
         print "Has nginx"
@@ -97,4 +96,4 @@ if __name__ == "__main__":
     check_version()
     conf.check_collectd_exists()
     conf.check_collectd_path()
-# detect_applications()
+    detect_applications()

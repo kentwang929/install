@@ -1,5 +1,6 @@
 import install_utils as utils
 import sys
+import re
 
 COLLECTD_HOME="/etc/collectd"
 COLLECTD_CONF_DIR=COLLECTD_HOME+"/managed_config"
@@ -8,6 +9,7 @@ COLLECTD_CONF_DIR=COLLECTD_HOME+"/managed_config"
 NOT_AUTH = 2
 NOT_FOUND = 1
 HTTP_OK = 0
+INVALID_URL = -1
 
 def check_collectd_exists():
     print "Checking if collectd exists"
@@ -77,9 +79,21 @@ def include_apache_es_conf(dir):
         'ExtendedStatus on')
     out.close()
 
+
+# Apache Installation
+def apache_title():
+  sys.stdout.write(""
+  " _____ __________  _____  _________   ___ ______________\n"
+  "   /  _  \\______   \/  _  \ \_   ___ \ /   |   \_   _____/\n"
+  "  /  /_\  \|     ___/  /_\  \/    \  \//    ~    \    __)_ \n"
+  " /    |    \    |  /    |    \     \___\    Y    /        \ \n"
+  " \____|__  /____|  \____|__  /\______  /\___|_  /_______  /\n"
+  "         \/                \/        \/       \/        \/ \n")
+
 def install_apache_plugin():
-    print "---Apache---"
+    apache_title()
     install = check_install_state("Apache")
+    print ""
     if not install:
         print "This script has detected that you have apache installed and running."
         res = utils.ask("Would you like collectd to collect data from apache")
@@ -90,7 +104,7 @@ def install_apache_plugin():
     if not res:
         return
 
-    print "---Begin collectd Apache plugin installer---"
+    utils.print_step("Begin collectd Apache plugin installer")
 
     """
     - check dependency
@@ -100,20 +114,23 @@ def install_apache_plugin():
     - prompt for user information
     """
     if not utils.command_exists("curl"):
-        utils.exit_with_message("Curl is needed for this plugin")
+        utils.exit_with_failure("Curl is needed for this plugin.")
 
     # ubuntu check
     # Assuming latest apache2 is installed and the installation
     # directory is in the default place
+    utils.print_step("Checking if mod_status is enabled")
     cmd_res = utils.get_command_output("ls /etc/apache2/mods-enabled")
     if "status.conf" not in cmd_res or "status.load" not in cmd_res: 
-        print "Enabling apache2 mod_status module."
+        utils.print_step("Enabling apache2 mod_status module.")
         ret = utils.call_command("sudo a2enmod status")
         if ret != 0:
             utils.exit_with_message("a2enmod command was not found")
 
+    utils.print_success()
+    print ""
     sys.stdout.write("In order to enable the apache plugin with collectd, the "
-                     "ExtendedStatus setting must be turned on.")
+                     "ExtendedStatus setting must be turned on.\n")
     res = utils.ask("Has this setting been set?", "no")
 
     """
@@ -124,103 +141,169 @@ def install_apache_plugin():
         if res:
             # include the config file in /apache2/conf-enabled
             conf_dir = "/etc/apache2/conf-enabled"
+            utils.print_step("Checking if "+conf_dir+" exists.")
             if utils.check_path_exists(conf_dir):
                 # pull config file here
+                utils.print_success()
                 include_apache_es_conf(conf_dir)
-                sys.stdout.write("extendedstatus.conf is now included in the "
-                             "apache2/conf-enabled dir.")
+                sys.stdout.write("\nextendedstatus.conf is now included in the "+
+                                 conf_dir+" dir.\n")
+                print ""
+                ret = utils.call_command("service apache2 restart")
+                if ret != 0:
+                    utils.exit_with_message("Failed to restart apache service")
             else:
-                exit_with_message("conf-enabled dir does not exist, "+
+                exit_with_message(conf_dir + " dir does not exist, "+
                                   "please consult support@wavefront.com"+
                                   "for any additional help.")
         else:
             utils.exit_with_message("Consult support@wavefront.com for any "
                 "additional help.")
 
-    out = utils.write_file("wavefront_temp_apache")
+    # Begin writing apache plugin
+    utils.print_step("Begin writing apache plugin for collectd")
+    plugin_file = "wavefront_temp_apache.conf"
+    out = utils.write_file(plugin_file)
     error = False
     if out is None:
         utils.exit_with_message("")
 
     try:
-        res = write_apache_plugin()
+        res = write_apache_plugin(out)
     except:
         sys.stderr.write("Unexpected flow\n")
         error = True
     finally:
+        out.close()
         if error:
-            sys.stderr.write("Closing and rming temp file")
-            out.close
-            utils.call_command("rm wavefront_temp_apache")
+            sys.stderr.write("Closing and removing temp file")
+            utils.call_command("rm "+plugin_file)
+            print ""
+            sys.exit()
 
-    # apache_plugn_name has been written to $location
+    # if there was at least one instance being monitor
     if res:
-        print "Apache_plugin has been written successfully."
-        utils.call_command("cp wavefront_temp_apache "+
-                            COLLECTD_CONF_DIR)
-        utils.call_command("rm wavefront_temp_apache")
-        print "Restarting collectd service"
-        utils.call_command("sudo service collectd restart")
-        sys.stdout.write("To check if this plugin has been successfully, "
-              "please check if apache. is included in your "
-              "browse metric page.")
+        utils.print_step("Copying the plugin file to the correct place")
+        cp_cmd = "cp "+plugin_file+" "+ \
+                  COLLECTD_CONF_DIR+ \
+                 "/wavefront_apache.conf"
+        ret = utils.call_command(cp_cmd)
 
-    # restart after the configuration 
-    # pull the appropriate template
+        if ret == 0:
+            utils.print_success()
+            print "Apache_plugin has been written successfully."
+            print ""
+            utils.call_command("service collectd restart")
+            print ""
+            sys.stdout.write("To check if this plugin has been successfully, "
+                  "please check if apache. is included in your "
+                  "browse metric page.\n")
+        else:
+            exit_with_message("Failed to copy the plugin file.\n")
+    else:
+        sys.stdout.write("You did not provide any instance to monitor.\n")
 
-def check_apache_server_status(url):
-    res = utils.get_http_status(url)
+    utils.call_command("rm "+plugin_file)
 
-    if( "401 Unauthorized" in res ):
+def check_http_response(http_res):
+    http_status_re = re.match("HTTP/1.1 (\d* [\w ]*)\s", http_res) 
+    if http_status_re is None:
+        utils.print_warn("Invalid http response header!")
+        sys.exit()
+
+    http_code = http_status_re.group(1)
+
+    if( "401 Unauthorized" in http_code ):
         return NOT_AUTH
-    elif( "404 Not Found" in res ):
+    elif( "404 Not Found" in http_code ):
         return NOT_FOUND
-    elif( "200 OK" in res ):
+    elif( "200 OK" in http_code ):
         return HTTP_OK
+    else:
+        return INVALID_URL
         
+def check_apache_server_status(payload):
+    atitle_re = re.search(r'(<head>[\w\W\s]*<title>Apache '+
+        'Status</title>[\w\W\s]*</head>)([\w\W\s]*)', payload)
+
+    if atitle_re is not None:
+        res = atitle_re.group(2)
+        ah1_re = re.search(r'<h1>(Apache Server Status for )([\w\W]*?)</h1>',
+                  res)
+        if ah1_re is not None:
+            res = ah1_re.group(1) + ah1_re.group(2)
+            return res
+
+    return None
+
 def write_apache_plugin(out):
     # COLLECTD_CONF_DIR+"/10-apache.conf")
-    out.write('LoadPlugin "apache"')
+    out.write('LoadPlugin "apache"\n')
     out.write('<Plugin "apache">\n')
 
     count = 0
     server_list = []
 
+    print ""
     sys.stdout.write("To monitor a apache server, "
         "you must have/add something similar to the configuration file:\n"
         "<Location /server-status>\n"
         "  SetHandler server-status\n"
         "</Location>\n"
-        "to enable the status support.")
+        "to enable the status support.\n")
  
-    while(ask("Would you like to add a new instance to monitor?")):
+    while(utils.ask("Would you like to add a new instance to monitor?")):
         url = utils.get_input("Please enter the url that contains your "+
                               "server-status:")
-        ret = check_apache_server_status(url)
+        print ""
+        utils.print_step("Checking http response for %s" % url)
+        res = utils.get_command_output('curl -s -i '+url)
+
+        if res is None:
+            ret = INVALID_URL
+        else:
+            ret = check_http_response(res)
 
         if ret == NOT_AUTH:
             # skip for this case for now, ask for user/pass
             sys.stderr.write("Authorization server status is required, please "
-                            "try again.")
-        elif ret == NOT_FOUND:
+                            "try again.\n")
+        elif ret == NOT_FOUND or ret == INVALID_URL:
             sys.stderr.write("Invalid url was provided, please try "
-                            "again.")
+                            "again.\n")
         elif ret == HTTP_OK:
-            count = count + 1
-            instance = "apache%d" % count 
-            url_auto = url+"?auto"
-            out.write('  <Instance "'+instance+'">\n')
-            out.write('    URL '+url_auto+'\n')
-            out.write('  </Instance>\n')
-            sys.stdout.write("Url was fetched successfully, "+instance+
-                " will monitor "+url)
+            if url in server_list:
+                utils.print_warn("You have already added this url") 
+            else:
+                res = check_apache_server_status(res)
+                if res is None:
+                    utils.print_warn("The url you have provided "+
+                        "does not seem to be the correct server_status "+
+                        "page.  Incorrect server-status will not be recorded "+
+                        "by collectd.")
+                    utils.ask("Would you like to record this url anyway?", "no")
+                else:
+                    utils.print_success()
+                    print res
+                    res = utils.ask("Is this the correct status to monitor?")
+                    print ""
+                    if res:
+                        count = count + 1
+                        server_list.append(url)
+                        instance = "apache%d" % count 
+                        url_auto = url+"?auto"
+                        out.write('  <Instance "'+instance+'">\n')
+                        out.write('    URL "'+url_auto+'"\n')
+                        out.write('  </Instance>\n')
 
     out.write('</Plugin>\n')
-    return True
+    return count
 
 if __name__ == "__main__":
     print "Testing conf_collected_plugin"
     print COLLECTD_HOME
     print COLLECTD_CONF_DIR
-    print utils.command_exists("curl")
-    #    check_collectd_path()
+    print "Curls command: ", utils.command_exists("curl")
+    
+    url = raw_input("Enter a url to check:\n")
+    check_apache_server_status(url)
