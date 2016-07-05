@@ -282,7 +282,7 @@ def write_apache_plugin(out):
 
     while(utils.ask("Would you like to add a server to monitor?")):
         url = utils.get_input("Please enter the url that contains your "+
-                              "server-status:")
+                              "server-status (ex: www.apache.org/server_status):")
         print ""
         utils.print_step("Checking http response for %s" % url)
         res = utils.get_command_output('curl -s -i '+url)
