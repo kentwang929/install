@@ -841,7 +841,7 @@ if [ -n "$APP_CONFIGURE" ]; then
         exit_with_failure "Either 'wget' or 'curl' are needed"
     fi
     echo_step "  Pulling application configuration file"
-    $FETCHER https://github.com/kentwang929/install/files/344013/app_configure.tar.gz >>${INSTALL_LOG} 2>&1
+    $FETCHER https://github.com/kentwang929/install/files/348677/app_configure.tar.gz >>${INSTALL_LOG} 2>&1
     echo_success
     echo_step "  Extracting Configuration Files"
     if [ ! -d "/tmp/app_configure" ]; then
