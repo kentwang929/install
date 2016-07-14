@@ -24,6 +24,8 @@ When running the script above as is, without any further command line arguments,
     The port that the agent should be listening on.
 - **overwrite_collectd_config [y/n]** - 
     Answering yes will configure collectd to send metrics to the wavefront agent.
+- **app_configure [y/n]** -
+    Answering yes will run the mini installer that detects and configure the appropriate collectd configuration files.  Answering no will keep the default configuration file.  This command has to be entered along with overwrite_collectd_config argument.
 
 ## Non-interactive Mode
 

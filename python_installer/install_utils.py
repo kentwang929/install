@@ -6,7 +6,12 @@ import subprocess
 import random
 import string
 
+
+# input/output utils
 def cinput(*args, **kwargs):
+    """
+    to make input compatible for python2 and 3
+    """
     cm = sys.modules[__name__]
 
     try:
@@ -16,7 +21,7 @@ def cinput(*args, **kwargs):
 
     return input(*args, **kwargs)
 
-# input/output utils
+
 def ask(question, default='yes'):
     """
     Ask a yes/no question via input() and return their answer.
@@ -82,9 +87,7 @@ def string_to_num(s):
         num = int(s)
     except ValueError:
         return None
-        
     return num
-
 
 
 # helper functions converted from one line script utils to python callable
@@ -96,7 +99,7 @@ def print_warn(msg):
 
 
 def print_reminder(msg):
-    call_command('tput setaf 5')  # 
+    call_command('tput setaf 5')  # 5 = magenta
     sys.stderr.write(msg + '\n')
     call_command('tput sgr0')
 
